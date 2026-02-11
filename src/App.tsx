@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import './App.css'
 
 // Harmlose Wahrheiten für normale Spieler
@@ -127,8 +127,8 @@ interface Challenge {
   player: Player
 }
 
-// Farben für die Rad-Segmente
-const WHEEL_COLORS = [
+// Farben für die Spieler
+const PLAYER_COLORS = [
   '#8b5cf6', // violet
   '#ec4899', // pink
   '#06b6d4', // cyan
@@ -147,8 +147,10 @@ function App() {
   const [currentChallenge, setCurrentChallenge] = useState<Challenge | null>(null)
   const [usedTruths, setUsedTruths] = useState<Map<string, Set<string>>>(new Map())
   const [usedDares, setUsedDares] = useState<Map<string, Set<string>>>(new Map())
-  const [wheelRotation, setWheelRotation] = useState(0)
   const [isSpinning, setIsSpinning] = useState(false)
+  const [displayedPlayerIndex, setDisplayedPlayerIndex] = useState(0)
+  const [slotSpeed, setSlotSpeed] = useState(50)
+  const spinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const addPlayer = useCallback(() => {
     const name = playerInput.trim()
@@ -169,49 +171,96 @@ function App() {
     setPhase('spinning')
   }
 
-  const spinWheel = () => {
+  // Gewichtete Spieler-Auswahl: Thanu hat ~2.5x höhere Chance
+  const getWeightedRandomPlayer = useCallback(() => {
+    // Erstelle eine gewichtete Liste
+    const weightedList: Player[] = []
+    
+    players.forEach(player => {
+      if (player.isTarget) {
+        // Thanu kommt 2-3x in die Liste (subtil mehr Chancen)
+        weightedList.push(player)
+        weightedList.push(player)
+        // 50% Chance auf einen dritten Eintrag (macht es weniger vorhersehbar)
+        if (Math.random() > 0.5) {
+          weightedList.push(player)
+        }
+      } else {
+        weightedList.push(player)
+      }
+    })
+    
+    // Zufällig aus der gewichteten Liste wählen
+    const randomIndex = Math.floor(Math.random() * weightedList.length)
+    return weightedList[randomIndex]
+  }, [players])
+
+  const startSlotMachine = () => {
     if (isSpinning || players.length === 0) return
     setIsSpinning(true)
+    setSlotSpeed(50)
     
-    // Zufälligen Spieler wählen
-    const selectedIndex = Math.floor(Math.random() * players.length)
-    const selectedPlayer = players[selectedIndex]
+    // Wähle den Gewinner VOR dem Spin (gewichtet)
+    const winner = getWeightedRandomPlayer()
+    const winnerIndex = players.findIndex(p => p.name === winner.name)
     
-    // Segment-Winkel berechnen
-    const segmentAngle = 360 / players.length
+    let currentSpeed = 50
+    let iterations = 0
+    const maxIterations = 25 + Math.floor(Math.random() * 10) // 25-35 Durchläufe
     
-    // CONIC-GRADIENT Layout (von oben, im Uhrzeigersinn):
-    // - Segment 0: von 0° bis segmentAngle°, Mitte bei segmentAngle/2
-    // - Segment N: Mitte bei (N + 0.5) * segmentAngle
-    //
-    // Der Zeiger ist OBEN fixiert (0° Position)
-    // CSS transform: rotate(X) dreht im Uhrzeigersinn
-    // Bei Rotation X zeigt der Zeiger auf Rad-Position X
-    
-    const segmentCenter = (selectedIndex + 0.5) * segmentAngle
-    
-    // Aktuelle Position des Rades (normalisiert auf 0-360)
-    const currentAngle = wheelRotation % 360
-    
-    // Wie viel müssen wir von der aktuellen Position drehen um zum Ziel zu kommen?
-    // (immer vorwärts/im Uhrzeigersinn)
-    let additionalRotation = segmentCenter - currentAngle
-    if (additionalRotation < 0) {
-      additionalRotation += 360
+    // Slot-Machine Animation
+    const animate = () => {
+      iterations++
+      
+      // Nächsten Spieler anzeigen (durchrattern)
+      setDisplayedPlayerIndex(prev => (prev + 1) % players.length)
+      
+      // Geschwindigkeit verlangsamen gegen Ende
+      if (iterations > maxIterations * 0.6) {
+        currentSpeed = Math.min(currentSpeed * 1.15, 400)
+        setSlotSpeed(currentSpeed)
+      }
+      
+      // Stopp-Bedingung: Genug Iterationen UND wir sind beim Gewinner
+      if (iterations >= maxIterations) {
+        // Letzte Durchläufe bis zum Gewinner
+        const stepsToWinner = (winnerIndex - (displayedPlayerIndex % players.length) + players.length) % players.length
+        
+        if (stepsToWinner === 0 || iterations > maxIterations + players.length + 2) {
+          // Stopp!
+          clearInterval(spinIntervalRef.current!)
+          spinIntervalRef.current = null
+          setDisplayedPlayerIndex(winnerIndex)
+          setIsSpinning(false)
+          setCurrentPlayer(winner)
+          
+          // Kurze Verzögerung bevor zur Auswahl gewechselt wird
+          setTimeout(() => {
+            setPhase('choosing')
+          }, 800)
+          return
+        }
+      }
+      
+      // Nächsten Frame planen
+      if (spinIntervalRef.current) {
+        clearInterval(spinIntervalRef.current)
+      }
+      spinIntervalRef.current = setTimeout(animate, currentSpeed)
     }
     
-    // Mehrere volle Umdrehungen für den Effekt + die zusätzliche Rotation zum Ziel
-    const fullRotations = (4 + Math.floor(Math.random() * 2)) * 360
-    const totalAdditionalRotation = fullRotations + additionalRotation
-    
-    setWheelRotation(prev => prev + totalAdditionalRotation)
-    
-    setTimeout(() => {
-      setCurrentPlayer(selectedPlayer)
-      setIsSpinning(false)
-      setPhase('choosing')
-    }, 4000)
+    // Start
+    spinIntervalRef.current = setTimeout(animate, currentSpeed)
   }
+
+  // Cleanup bei unmount
+  useEffect(() => {
+    return () => {
+      if (spinIntervalRef.current) {
+        clearInterval(spinIntervalRef.current)
+      }
+    }
+  }, [])
 
   const getChallenge = (type: ChallengeType): string => {
     if (!currentPlayer) return ''
@@ -262,29 +311,22 @@ function App() {
   }
 
   const resetGame = () => {
+    if (spinIntervalRef.current) {
+      clearInterval(spinIntervalRef.current)
+      spinIntervalRef.current = null
+    }
     setPhase('setup')
     setPlayers([])
     setCurrentPlayer(null)
     setCurrentChallenge(null)
     setUsedTruths(new Map())
     setUsedDares(new Map())
-    setWheelRotation(0)
+    setIsSpinning(false)
+    setDisplayedPlayerIndex(0)
   }
 
-  // Erzeuge conic-gradient für das Rad
-  const getWheelBackground = () => {
-    if (players.length === 0) return '#333'
-    
-    const segmentAngle = 360 / players.length
-    const stops = players.map((_, index) => {
-      const color = WHEEL_COLORS[index % WHEEL_COLORS.length]
-      const start = index * segmentAngle
-      const end = (index + 1) * segmentAngle
-      return `${color} ${start}deg ${end}deg`
-    }).join(', ')
-    
-    return `conic-gradient(from 0deg, ${stops})`
-  }
+  // Aktuell angezeigter Spieler im Slot
+  const displayedPlayer = players[displayedPlayerIndex] || players[0]
 
   return (
     <div className="app">
@@ -317,7 +359,7 @@ function App() {
                 <div key={index} className="player-tag" style={{ animationDelay: `${index * 0.1}s` }}>
                   <span 
                     className="player-avatar"
-                    style={{ background: WHEEL_COLORS[index % WHEEL_COLORS.length] }}
+                    style={{ background: PLAYER_COLORS[index % PLAYER_COLORS.length] }}
                   >
                     {player.name[0].toUpperCase()}
                   </span>
@@ -345,42 +387,48 @@ function App() {
 
       {phase === 'spinning' && (
         <div className="spinning-phase">
-          <div className="wheel-container">
-            <div className="wheel-pointer">▼</div>
-            <div 
-              className="wheel"
-              style={{ 
-                background: getWheelBackground(),
-                transform: `rotate(${wheelRotation}deg)` 
-              }}
-            >
-              {/* Labels für jeden Spieler */}
-              {players.map((player, index) => {
-                const segmentAngle = 360 / players.length
-                // Label in die Mitte des Segments positionieren
-                const labelAngle = index * segmentAngle + (segmentAngle / 2)
-                return (
-                  <div
-                    key={index}
-                    className="wheel-label-container"
-                    style={{
-                      transform: `rotate(${labelAngle}deg)`,
-                    }}
-                  >
-                    <span className="wheel-label">{player.name}</span>
+          {/* Slot Machine Container */}
+          <div className="slot-machine">
+            <div className="slot-frame">
+              <div className="slot-glow"></div>
+              <div className={`slot-display ${isSpinning ? 'spinning' : 'stopped'}`}>
+                {displayedPlayer && (
+                  <div className="slot-player">
+                    <div 
+                      className="slot-avatar"
+                      style={{ 
+                        background: PLAYER_COLORS[displayedPlayerIndex % PLAYER_COLORS.length],
+                        transform: isSpinning ? `scale(${0.9 + Math.random() * 0.2})` : 'scale(1)'
+                      }}
+                    >
+                      {displayedPlayer.name[0].toUpperCase()}
+                    </div>
+                    <div className="slot-name">{displayedPlayer.name}</div>
                   </div>
-                )
-              })}
-              <div className="wheel-center">?</div>
+                )}
+              </div>
+              <div className="slot-indicator slot-indicator-left">▶</div>
+              <div className="slot-indicator slot-indicator-right">◀</div>
+            </div>
+            
+            {/* Alle Spieler als kleine Vorschau */}
+            <div className="player-preview">
+              {players.map((player, index) => (
+                <div 
+                  key={index} 
+                  className={`preview-dot ${index === displayedPlayerIndex ? 'active' : ''}`}
+                  style={{ background: PLAYER_COLORS[index % PLAYER_COLORS.length] }}
+                />
+              ))}
             </div>
           </div>
           
           <button 
-            onClick={spinWheel} 
+            onClick={startSlotMachine} 
             className="btn-spin"
             disabled={isSpinning}
           >
-            {isSpinning ? '🎰 Dreht...' : '🎯 Drehen!'}
+            {isSpinning ? '🎰 Läuft...' : '🎰 Starten!'}
           </button>
           
           <button onClick={resetGame} className="btn-secondary">
@@ -396,7 +444,7 @@ function App() {
               <div 
                 className="player-avatar-large"
                 style={{ 
-                  background: WHEEL_COLORS[players.findIndex(p => p.name === currentPlayer.name) % WHEEL_COLORS.length] 
+                  background: PLAYER_COLORS[players.findIndex(p => p.name === currentPlayer.name) % PLAYER_COLORS.length] 
                 }}
               >
                 {currentPlayer.name[0].toUpperCase()}
@@ -442,7 +490,7 @@ function App() {
               <div 
                 className="player-avatar-large"
                 style={{ 
-                  background: WHEEL_COLORS[players.findIndex(p => p.name === currentChallenge.player.name) % WHEEL_COLORS.length] 
+                  background: PLAYER_COLORS[players.findIndex(p => p.name === currentChallenge.player.name) % PLAYER_COLORS.length] 
                 }}
               >
                 {currentChallenge.player.name[0].toUpperCase()}
