@@ -3,11 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     
+    <!-- Viewport - Fixed, No Zoom, No Scroll -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    
     <!-- PWA Meta Tags -->
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#8b5cf6" />
     <meta name="background-color" content="#0c0a1d" />
     <meta name="description" content="Das ultimative Party-Spiel für unvergessliche Abende!" />
+    <meta name="mobile-web-app-capable" content="yes" />
     
     <!-- iOS PWA -->
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -24,6 +27,19 @@
     <link rel="manifest" href="/manifest.json" />
     
     <title>Wahrheit oder Pflicht 🎲</title>
+    
+    <!-- Prevent overscroll/bounce -->
+    <style>
+      html, body, #root {
+        height: 100%;
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        position: fixed;
+        touch-action: manipulation;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>
