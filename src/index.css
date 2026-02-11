@@ -18,6 +18,8 @@ html, body, #root {
   left: 0;
   right: 0;
   bottom: 0;
+  background: #0c0a1d;
+  background: linear-gradient(135deg, #0c0a1d 0%, #1a1333 50%, #0f172a 100%);
 }
 
 html {

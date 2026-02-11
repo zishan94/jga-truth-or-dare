@@ -28,7 +28,7 @@
     
     <title>Wahrheit oder Pflicht 🎲</title>
     
-    <!-- Prevent overscroll/bounce -->
+    <!-- Prevent overscroll/bounce + Dark theme fallback -->
     <style>
       html, body, #root {
         height: 100%;
@@ -38,6 +38,9 @@
         overflow: hidden;
         position: fixed;
         touch-action: manipulation;
+        background: #0c0a1d;
+        background: linear-gradient(135deg, #0c0a1d 0%, #1a1333 50%, #0f172a 100%);
+        color: #ffffff;
       }
     </style>
   </head>
