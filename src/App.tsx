@@ -149,7 +149,6 @@ function App() {
   const [usedDares, setUsedDares] = useState<Map<string, Set<string>>>(new Map())
   const [isSpinning, setIsSpinning] = useState(false)
   const [displayedPlayerIndex, setDisplayedPlayerIndex] = useState(0)
-  const [slotSpeed, setSlotSpeed] = useState(50)
   const spinIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   const addPlayer = useCallback(() => {
@@ -198,7 +197,6 @@ function App() {
   const startSlotMachine = () => {
     if (isSpinning || players.length === 0) return
     setIsSpinning(true)
-    setSlotSpeed(50)
     
     // Wähle den Gewinner VOR dem Spin (gewichtet)
     const winner = getWeightedRandomPlayer()
@@ -218,7 +216,6 @@ function App() {
       // Geschwindigkeit verlangsamen gegen Ende
       if (iterations > maxIterations * 0.6) {
         currentSpeed = Math.min(currentSpeed * 1.15, 400)
-        setSlotSpeed(currentSpeed)
       }
       
       // Stopp-Bedingung: Genug Iterationen UND wir sind beim Gewinner
@@ -413,7 +410,7 @@ function App() {
             
             {/* Alle Spieler als kleine Vorschau */}
             <div className="player-preview">
-              {players.map((player, index) => (
+              {players.map((_, index) => (
                 <div 
                   key={index} 
                   className={`preview-dot ${index === displayedPlayerIndex ? 'active' : ''}`}
